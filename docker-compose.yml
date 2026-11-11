@@ -1,0 +1,28 @@
+# Eigener Container neben dem Taleward-Server. Kein Zugriff auf dessen Daten.
+services:
+  discord-bot:
+    build: .
+    image: taleward-discord-bot:local
+    container_name: taleward-discord-bot
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Spuren bis zum bestätigten Hochladen (mit Server verschlüsselt). Nur im Container lesbar.
+      # Herauskopieren: sudo docker cp taleward-discord-bot:/aufnahmen ./aufnahmen-kopie
+      - aufnahmen:/aufnahmen
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  aufnahmen:
