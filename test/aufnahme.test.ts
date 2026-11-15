@@ -439,3 +439,24 @@ describe("Kampagnen-Einstellung – anhalten, wenn jemand ohne Zustimmung dazuko
     assert.deepEqual([...r.gemeldet], ["gast"]);
   });
 });
+
+describe("QR-Bild zum Verbindungslink", () => {
+  it("ist ein gültiges Graustufen-PNG mit Ruhezone und passt zur Adresse", async () => {
+    const { qrPng, matrixAlsPng } = await import("../dist/aufnahme/qr.js");
+    const png = qrPng("https://taleward.beispiel.de/discord/abc");
+    assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    assert.equal(png.subarray(12, 16).toString("ascii"), "IHDR");
+    const breite = png.readUInt32BE(16);
+    assert.equal(breite, png.readUInt32BE(20), "quadratisch");
+    assert.ok(breite >= 300 && breite <= 450, `Breite ${breite}`);
+    assert.equal(png[24], 8, "8 Bit");
+    assert.equal(png[25], 0, "Graustufen");
+    assert.equal(png.subarray(png.length - 8, png.length - 4).toString("ascii"), "IEND");
+    // Dieselbe Adresse ergibt dasselbe Bild, eine andere ein anderes.
+    assert.ok(png.equals(qrPng("https://taleward.beispiel.de/discord/abc")));
+    assert.ok(!png.equals(qrPng("https://taleward.beispiel.de/discord/abd")));
+    // Kleinste Matrix: 1 Modul, 1 Bildpunkt, 1 Rand → 3 × 3, Mitte dunkel.
+    const klein = matrixAlsPng(() => true, 1, 1, 1);
+    assert.equal(klein.readUInt32BE(16), 3);
+  });
+});

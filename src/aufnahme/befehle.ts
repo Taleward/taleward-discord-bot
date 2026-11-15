@@ -4,6 +4,7 @@
 
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
@@ -24,6 +25,7 @@ import { spracheAus, t, type Sprache } from "../texte/texte.js";
 import type { Anbindung, Kontext } from "./anbindung.js";
 import { Aufnahme, dauerText, type Abschluss, type Hinweisart, type Melder, type StartErgebnis } from "./aufnahme.js";
 import { Hochlader } from "./hochladen.js";
+import { qrPng } from "./qr.js";
 
 const OHNE = { allowedMentions: { parse: [] as never[] } };
 
@@ -496,7 +498,9 @@ export async function talewardBefehl(interaktion: ChatInputCommandInteraction, a
       t(sprache, "tw_link_antwort", { url: link.url, bis: zeitText(link.expiresAt, sprache) }) +
       (mitCode ? `\n${t(sprache, "tw_link_code", { code: link.code })}` : "") +
       `\n${await verbundenText(anbindung, guild.id, userId, sprache)}`;
-    await interaktion.editReply({ content: text, components: [oeffnenZeile(sprache, link.url)], ...OHNE });
+    // Dazu der Link als QR-Bild, damit die SL ihn am Handy mit der Kamera öffnen kann (nur sie sieht die Antwort).
+    const qr = new AttachmentBuilder(qrPng(link.url), { name: "taleward-verbinden.png", description: t(sprache, "tw_link_qr") });
+    await interaktion.editReply({ content: text, components: [oeffnenZeile(sprache, link.url)], files: [qr], ...OHNE });
     return;
   }
 

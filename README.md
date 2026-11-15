@@ -10,7 +10,7 @@ Alles unter `/taleward`, Deutsch und Englisch (Discord wählt nach der Sprache d
 
 | Befehl (deutsch) | Wer | Was er tut |
 |---|---|---|
-| `/taleward link` (`verbinden`) | SL | Verbindungslink (und auf Wunsch Drei-Wörter-Code) nur für sie; in der App Kampagne wählen; die Bindung prüft der Server über die Discord-Anmeldung |
+| `/taleward link` (`verbinden`) | SL | Verbindungslink (und auf Wunsch Drei-Wörter-Code) nur für sie, dazu als QR-Bild für die Handykamera; in der App Kampagne wählen; die Bindung prüft der Server über die Discord-Anmeldung |
 | `/taleward unlink` (`trennen`) | SL | Verbindung lösen; bei mehreren Kampagnen Auswahlmenü |
 | `/taleward ready` (`bereit`) | alle | Eigener Stand; fehlt etwas, kommt der Zustimmungslink (nur für die Person) |
 | `/taleward join` (`beitreten`) | SL | Bot kommt in deinen Sprachkanal und spielt den Startton zur Probe; nimmt nichts auf |
