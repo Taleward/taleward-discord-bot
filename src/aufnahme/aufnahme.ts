@@ -81,6 +81,8 @@ export interface Laufend {
   pauseDurchZustimmung: boolean;
   /** Personen ohne Zustimmung, für die schon angehalten bzw. die beim Start schon da waren (keine zweite Pause). */
   ohneZustimmungGemeldet: Set<string>;
+  /** Je Spur: Paketstand beim letzten Takt und seit wann nichts ankam (Hinweis „von … kommt nichts an“). */
+  stille: Map<string, StilleMerk>;
   pausen: { vonMs: number; bisMs?: number }[];
   ereignisse: { zeitMs: number; was: string }[];
   /** Gemerkte Stellen, nur im Testmodus ins Protokoll (mit Server merkt sie der Server je Person); nie die Notiz. */
@@ -110,6 +112,8 @@ export interface Melder {
   /** Die Namensliste hat sich geändert (Widerruf, Dazukommen). */
   namen(namen: string[]): Promise<void>;
   hinweis(art: Hinweisart): Promise<void>;
+  /** Von diesen aufgenommenen Personen kommt seit längerem nichts an (Mikrofon stumm, falsches Gerät). */
+  stille(namen: string[]): Promise<void>;
 }
 
 export type Zustand = "bereit" | "verbunden" | "laeuft" | "pausiert";
@@ -211,6 +215,47 @@ export function ohneZustimmungEntscheiden(l: ZustimmungsLage): { entscheidung: "
   if (neu.length > 0 && !l.pausiert) return { entscheidung: "pause", gemeldet };
   if (offen.length === 0 && l.pausiert && l.pauseDurchZustimmung) return { entscheidung: "weiter", gemeldet };
   return { entscheidung: "nichts", gemeldet };
+}
+
+/** So lange ohne ein einziges Paket von einer aufgenommenen Person, dann ein Hinweis im Kanal (einmal je Stille). */
+export const STILLE_HINWEIS_MS = 10 * 60_000;
+
+export interface StilleMerk {
+  /** Paketstand der Spur beim letzten Takt. */
+  pakete: number;
+  /** Seit wann sich der Stand nicht geändert hat (Wanduhr, ms). */
+  seit: number;
+  gemeldet: boolean;
+}
+
+/**
+ * Rein: Von welchen Spuren kam seit `grenzeMs` kein Paket mehr? Während einer Pause zählt die Zeit nicht (die Uhr
+ * startet danach neu). Kommt wieder etwas an, beginnt die Stille von vorn und darf später erneut gemeldet werden.
+ * Liefert die Namen, die jetzt zu melden sind, und die fortgeschriebene Merkliste (nur noch vorhandene Spuren).
+ */
+export function stilleEntscheiden(
+  spuren: readonly { id: string; name: string; echtePakete: number }[],
+  merk: ReadonlyMap<string, StilleMerk>,
+  jetzt: number,
+  pausiert: boolean,
+  grenzeMs = STILLE_HINWEIS_MS,
+): { melden: string[]; merk: Map<string, StilleMerk> } {
+  const neu = new Map<string, StilleMerk>();
+  const melden: string[] = [];
+  for (const s of spuren) {
+    const alt = merk.get(s.id);
+    if (!alt || alt.pakete !== s.echtePakete || pausiert) {
+      neu.set(s.id, { pakete: s.echtePakete, seit: jetzt, gemeldet: false });
+      continue;
+    }
+    const m = { ...alt };
+    if (!m.gemeldet && jetzt - m.seit >= grenzeMs) {
+      m.gemeldet = true;
+      melden.push(s.name);
+    }
+    neu.set(s.id, m);
+  }
+  return { melden, merk: neu };
 }
 
 export type StartErgebnis =
@@ -378,6 +423,7 @@ export class Aufnahme {
       bereitschaftZeit: Date.now(),
       bereitschaftStaende: new Map([...bereit.states].map(([id, s]) => [id, s.state])),
       ignorierteSprecher: 0,
+      stille: new Map(),
       pausiert: false,
       pauseDurchWache: false,
       pauseDurchServer: false,
@@ -485,6 +531,7 @@ export class Aufnahme {
       if (geaendert) await this.melder.namen(this.namen());
       await this.zustimmungPruefen(a, mitglieder.map((m) => m.id));
       if (this.laufend !== a) return;
+      await this.stillePruefen(a);
     } catch (fehler) {
       console.warn("aufnahme: takt", fehler instanceof Error ? fehler.message : fehler);
     }
@@ -532,6 +579,14 @@ export class Aufnahme {
       await this.weiter();
       await this.melder.hinweis("weiter_zustimmung");
     }
+  }
+
+  /** Hinweis, wenn von einer aufgenommenen Person seit 10 Minuten kein einziges Paket kam (Mikrofon stumm o. ä.). */
+  private async stillePruefen(a: Laufend): Promise<void> {
+    const lage = [...a.spuren.values()].map((s) => ({ id: s.id, name: s.name, echtePakete: s.spur.echtePakete }));
+    const z = stilleEntscheiden(lage, a.stille, Date.now(), a.pausiert);
+    a.stille = z.merk;
+    if (z.melden.length > 0) await this.melder.stille(z.melden);
   }
 
   private async serverDa(a: Laufend): Promise<void> {

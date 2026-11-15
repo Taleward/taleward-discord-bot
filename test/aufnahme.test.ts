@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { befehlsDefinitionen } from "../dist/befehle.js";
 import { konfigurationLaden } from "../dist/konfiguration.js";
-import { BEREITSCHAFT_HOECHSTALTER_MS, SERVER_ENDE_MS, bereitschaftVeraltet, dateiname, ohneStandEntscheiden, ohneZustimmungEntscheiden, dauerText, loeschfrist, oggPakete, ordnername } from "../dist/aufnahme/aufnahme.js";
+import { BEREITSCHAFT_HOECHSTALTER_MS, SERVER_ENDE_MS, bereitschaftVeraltet, dateiname, ohneStandEntscheiden, ohneZustimmungEntscheiden, STILLE_HINWEIS_MS, stilleEntscheiden, dauerText, loeschfrist, oggPakete, ordnername } from "../dist/aufnahme/aufnahme.js";
 import { OpusSpur, PAKET_SAMPLES, STILLE, dateiZiel, oggCrc, oggSeite, opusHead } from "../dist/aufnahme/ogg.js";
 import { TON_PAUSE, TON_START, TON_STOPP, TON_WEITER } from "../dist/aufnahme/toene.js";
 import { Wache } from "../dist/aufnahme/wache.js";
@@ -359,6 +359,40 @@ describe("D5.1 – Alter des Zustimmungsstands", () => {
     assert.equal(antworten.length, 2);
     assert.match(antworten[0], /schon/i);
     assert.match(antworten[1], /https:\/\/srv\/discord\/abc/);
+  });
+});
+
+describe("Stille – Hinweis, wenn von einer Person nichts ankommt", () => {
+  const M = 60_000;
+  it("meldet nach 10 Minuten ohne Paket genau einmal, nach neuen Paketen wieder von vorn", () => {
+    let merk = new Map();
+    const lage = (p: number) => [{ id: "a", name: "Lea", echtePakete: p }, { id: "b", name: "Tom", echtePakete: 5 }];
+    // Tom spricht nie, Lea erst ab Minute 12.
+    let z = stilleEntscheiden(lage(0), merk, 0, false); merk = z.merk;
+    assert.deepEqual(z.melden, []);
+    z = stilleEntscheiden(lage(0), merk, 9 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, []);
+    z = stilleEntscheiden(lage(0), merk, 10 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, ["Lea", "Tom"]);
+    z = stilleEntscheiden(lage(0), merk, 11 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, [], "nicht noch einmal");
+    z = stilleEntscheiden(lage(3), merk, 12 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, [], "Lea spricht, Uhr neu");
+    z = stilleEntscheiden(lage(3), merk, 22 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, ["Lea"], "nach erneuten 10 Minuten wieder, Tom nicht noch einmal");
+    assert.equal(STILLE_HINWEIS_MS, 10 * M);
+  });
+  it("zählt Pausen nicht mit und vergisst verschwundene Spuren", () => {
+    let merk = new Map();
+    const lage = [{ id: "a", name: "Lea", echtePakete: 0 }];
+    let z = stilleEntscheiden(lage, merk, 0, false); merk = z.merk;
+    z = stilleEntscheiden(lage, merk, 8 * M, true); merk = z.merk; // Pause: Uhr neu
+    z = stilleEntscheiden(lage, merk, 15 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, [], "7 Minuten seit Ende der Pause reichen nicht");
+    z = stilleEntscheiden(lage, merk, 18 * M, false); merk = z.merk;
+    assert.deepEqual(z.melden, ["Lea"]);
+    z = stilleEntscheiden([], merk, 19 * M, false);
+    assert.equal(z.merk.size, 0);
   });
 });
 

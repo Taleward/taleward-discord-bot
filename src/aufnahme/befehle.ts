@@ -50,6 +50,13 @@ export class KanalMelder implements Melder {
     else console.warn("aufnahme: Namensliste im Kanal konnte nicht aktualisiert werden (kein Schreibrecht?)");
   }
 
+  async stille(namen: string[]): Promise<void> {
+    if (!this.kanal) return;
+    const liste = namen.map((n) => sauber(n, 40)).join(", ");
+    const ok = await this.kanal.send({ content: t(this.sprache, "tw_hinweis_stille", { namen: liste }), ...OHNE }).then(() => true, () => false);
+    if (!ok) console.warn("aufnahme: Hinweis zur Stille konnte nicht in den Kanal geschrieben werden (kein Schreibrecht?)");
+  }
+
   async hinweis(art: Hinweisart): Promise<void> {
     if (art === "angekommen" || art === "verworfen") {
       await this.nachricht?.edit({ content: t(this.sprache, art === "angekommen" ? "tw_angekommen" : "tw_verworfen_kanal"), ...OHNE }).catch(() => undefined);
